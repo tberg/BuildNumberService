@@ -7,6 +7,11 @@ import "fmt"
 import "gopkg.in/yaml.v2"
 import "io/ioutil"
 
+import "github.com/mattn/go-sqlite3"
+import "os"
+import "os/signal"
+import "syscall"
+
 type Args struct {
 	Config string
 }
@@ -37,9 +42,29 @@ func load_config(path string) Config {
 	err = yaml.Unmarshal(dat, &conf)
 	check(err)
 	return conf
+	/*
+	  conf := Config{"/var/run/my.pid", "/var/lib/bns/"}
+	  buf, err := yaml.Marshal(conf)
+	  check(err)
+	  fmt.Printf("conf: %s", buf)
+	  err = ioutil.WriteFile("test.yaml", buf, 644)
+	  check(err)
+	*/
+}
+
+func cleanup() {
+	fmt.Println("goodbye.")
 }
 
 func main() {
+	// set cleanup hook
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		cleanup()
+		os.Exit(1)
+	}()
 
 	// Parse command line
 	args := parse_args()
@@ -50,12 +75,9 @@ func main() {
 	fmt.Printf("pidfile: %s\n", conf.Pidfile)
 	fmt.Printf("dbpath: %s\n", conf.DbPath)
 	fmt.Printf("port: %d\n", conf.Port)
-	/*
-	  conf := Config{"/var/run/my.pid", "/var/lib/bns/"}
-	  buf, err := yaml.Marshal(conf)
-	  check(err)
-	  fmt.Printf("conf: %s", buf)
-	  err = ioutil.WriteFile("test.yaml", buf, 644)
-	  check(err)
-	*/
+
+	// Set up REST api routes
+	db, err := sql.Open(conf.DbPath)
+	check(err)
+
 }

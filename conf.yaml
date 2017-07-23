@@ -1,4 +1,4 @@
 ---
 pidfile: /var/run/bns.pid
-dbpath: /var/lib/foo.db
+dbpath: ./foo.db
 port: 7000

@@ -2,15 +2,17 @@
 
 package main
 
-import "flag"
-import "fmt"
-import "gopkg.in/yaml.v2"
-import "io/ioutil"
-
-import "github.com/mattn/go-sqlite3"
-import "os"
-import "os/signal"
-import "syscall"
+import (
+	"database/sql"
+	"flag"
+	"fmt"
+	_ "github.com/mattn/go-sqlite3"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"os"
+	"os/signal"
+	"syscall"
+)
 
 type Args struct {
 	Config string
@@ -77,7 +79,16 @@ func main() {
 	fmt.Printf("port: %d\n", conf.Port)
 
 	// Set up REST api routes
-	db, err := sql.Open(conf.DbPath)
+	db, err := sql.Open("sqlite3", conf.DbPath)
 	check(err)
+	defer db.Close()
 
+	create := `
+  create table if not exists state (
+    project varchar(30) primary key not null,
+    build integer
+  );
+  `
+	_, err = db.Exec(create)
+	check(err)
 }

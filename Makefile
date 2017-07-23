@@ -7,4 +7,4 @@ build: main.go
 	go build
 
 test: build
-	./BuildNumbers -config ./conf.yaml
+	./BuildNumberService -config ./conf.yaml

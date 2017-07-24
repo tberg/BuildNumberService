@@ -19,6 +19,8 @@ import (
 	"syscall"
 )
 
+const PIDFILE = "/var/run/bns.pid"
+
 type Args struct {
 	Config string
 }
@@ -60,8 +62,10 @@ func load_config(path string) Config {
 }
 
 func cleanup() {
-	// I think I'm not needed.
-	fmt.Println("goodbye.")
+	err := os.Remove(PIDFILE)
+	if nil != err {
+		log.Fatal(err)
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,8 +126,8 @@ func (c *State) _setBuildNumber(name string, newval int) {
 
 func (c *State) GetBuildNumber(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	build := c._getBuildNumber(params["project"])
-	c._setBuildNumber(params["project"], build+1)
+	build := c._getBuildNumber(params["project"]) + 1
+	c._setBuildNumber(params["project"], build)
 	log.Printf("GetBuildNumber: %d", build)
 	fmt.Fprintf(w, "SS_BUILD_NUMBER=%d\n", build)
 }
@@ -155,15 +159,6 @@ func (c *State) GetDB() *sql.DB {
 //Entrypoint
 
 func main() {
-	// set cleanup hook
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		cleanup()
-		os.Exit(1)
-	}()
-
 	// Parse command line
 	args := parse_args()
 	fmt.Printf("Config file: %s\n", args.Config)
@@ -175,6 +170,18 @@ func main() {
 	fmt.Printf("port: %d\n", conf.Port)
 
 	// Create pidfile
+	pidbuf := fmt.Sprintf("%d\n", os.Getpid())
+	err := ioutil.WriteFile(PIDFILE, []byte(pidbuf), 644)
+	check(err)
+
+	// set cleanup hook
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		cleanup()
+		os.Exit(1)
+	}()
 
 	// Set up REST api routes
 	// 	db, err := sql.Open("sqlite3", conf.DbPath)
@@ -192,7 +199,7 @@ func main() {
   `
 	// 	_, err = db.Exec(create)
 	// 	check(err)
-	_, err := state.GetDB().Exec(create)
+	_, err = state.GetDB().Exec(create)
 	check(err)
 	defer state.GetDB().Close()
 

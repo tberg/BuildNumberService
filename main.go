@@ -15,11 +15,18 @@ import (
 	"os"
 	"os/signal"
 	// "reflect"
+	"encoding/json"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
 const PIDFILE = "/var/run/bns.pid"
+const VERSION = "0.0.6"
+
+var Git = "not set"
+var Version = "not set"
+var Date = "not set"
 
 type Args struct {
 	Config string
@@ -61,8 +68,8 @@ func load_config(path string) Config {
 	*/
 }
 
-func cleanup() {
-	err := os.Remove(PIDFILE)
+func cleanup(pidfile string) {
+	err := os.Remove(pidfile)
 	if nil != err {
 		log.Fatal(err)
 	}
@@ -75,6 +82,10 @@ type State struct {
 	Args Args
 	Conf Config
 	Db   *sql.DB
+}
+
+type BuildNumber struct {
+	Build int `json:"BuildNumber" yaml:"BuildNumber"`
 }
 
 func (c *State) _addProject(name string) {
@@ -102,7 +113,7 @@ func (c *State) _getBuildNumber(name string) int {
 	for rows.Next() {
 		err = rows.Scan(&build)
 		check(err)
-		log.Printf("Found build %d for project %s", build, name)
+		log.Printf("Found build %d for project \"%s\"", build, name)
 	}
 	if build == -1 {
 		log.Printf("New project, creating entry.")
@@ -124,12 +135,57 @@ func (c *State) _setBuildNumber(name string, newval int) {
 	tx.Commit()
 }
 
+func (c *State) FormatOutput(build int, style string) string {
+	buf := ""
+	if strings.Compare(style, "json") == 0 {
+		log.Printf("Output style set to JSON")
+		data := &BuildNumber{build}
+		var err error
+		tmp, err := json.Marshal(data)
+		check(err)
+		buf = string(tmp)
+	} else if strings.Compare(style, "yaml") == 0 {
+		log.Printf("Output style set to Yaml")
+		data := &BuildNumber{build}
+		var err error
+		tmp, err := yaml.Marshal(data)
+		check(err)
+		buf = string(tmp)
+	} else {
+		// default to bash style
+		log.Printf("Output style defaulting to Bash")
+		buf = fmt.Sprintf("SS_BUILD_NUMBER=%d", build)
+	}
+	log.Printf("Output: %s", buf)
+	return buf
+}
+
 func (c *State) GetBuildNumber(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	build := c._getBuildNumber(params["project"]) + 1
-	c._setBuildNumber(params["project"], build)
+	_project := params["project"]
+	_style := params["style"]
+	log.Printf("vars: %s", params)
+	log.Printf("project: %s", _project)
+	log.Printf("style: %s", _style)
+
+	build := c._getBuildNumber(params["project"])
 	log.Printf("GetBuildNumber: %d", build)
-	fmt.Fprintf(w, "SS_BUILD_NUMBER=%d\n", build)
+	fmt.Fprintf(w, "%s\n", c.FormatOutput(build, _style))
+}
+
+func (c *State) IncrementBuildNumber(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	_project := params["project"]
+	_style := params["style"]
+	log.Printf("vars: %s", params)
+	log.Printf("project: %s", _project)
+	log.Printf("style: %s", _style)
+
+	build := c._getBuildNumber(_project)
+	build += 1
+	c._setBuildNumber(_project, build)
+
+	fmt.Fprintf(w, "%s\n", c.FormatOutput(build, _style))
 }
 
 func (c *State) SetBuildNumber(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +215,8 @@ func (c *State) GetDB() *sql.DB {
 //Entrypoint
 
 func main() {
+	log.Printf("Build Number Server version %s starting up", Version)
+	log.Printf(Git)
 	// Parse command line
 	args := parse_args()
 	fmt.Printf("Config file: %s\n", args.Config)
@@ -171,7 +229,7 @@ func main() {
 
 	// Create pidfile
 	pidbuf := fmt.Sprintf("%d\n", os.Getpid())
-	err := ioutil.WriteFile(PIDFILE, []byte(pidbuf), 644)
+	err := ioutil.WriteFile(conf.Pidfile, []byte(pidbuf), 644)
 	check(err)
 
 	// set cleanup hook
@@ -179,15 +237,9 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		cleanup()
+		cleanup(conf.Pidfile)
 		os.Exit(1)
 	}()
-
-	// Set up REST api routes
-	// 	db, err := sql.Open("sqlite3", conf.DbPath)
-	// 	check(err)
-	// 	defer db.Close()
-	// 	log.Printf("db: %s", reflect.TypeOf(db))
 
 	state := State{args, conf, nil}
 
@@ -205,7 +257,11 @@ func main() {
 
 	// buf := fmt.Sprintf(":%d", conf.Port)
 	router := mux.NewRouter().StrictSlash(true)
+	// router.HandleFunc("/{project}", state.GetBuildNumber).Methods("GET").Queries("action", "{new}")
+	router.HandleFunc("/{project}/inc", state.IncrementBuildNumber).Methods("GET")
+	router.HandleFunc("/{project}/inc/{style:(?:bash|json|yaml)}", state.IncrementBuildNumber).Methods("GET")
 	router.HandleFunc("/{project}", state.GetBuildNumber).Methods("GET")
+	router.HandleFunc("/{project}/{style:(?:bash|json|yaml)}", state.GetBuildNumber).Methods("GET")
 	router.HandleFunc("/{project}/{build}", state.SetBuildNumber).Methods("POST")
 	log.Fatal(http.ListenAndServe(state.GetPortString(), router))
 }

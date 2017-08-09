@@ -41,37 +41,6 @@ func check(e error) {
 	}
 }
 
-func parse_args() Args {
-	args := Args{}
-	flag.StringVar(&args.Config, "config", "/etc/bns.yaml", "Alternate configuration file.")
-	flag.Parse()
-	return args
-}
-
-func load_config(path string) Config {
-	conf := Config{}
-	dat, err := ioutil.ReadFile(path)
-	check(err)
-	err = yaml.Unmarshal(dat, &conf)
-	check(err)
-	return conf
-	/*
-	  conf := Config{"/var/run/my.pid", "/var/lib/bns/"}
-	  buf, err := yaml.Marshal(conf)
-	  check(err)
-	  fmt.Printf("conf: %s", buf)
-	  err = ioutil.WriteFile("test.yaml", buf, 644)
-	  check(err)
-	*/
-}
-
-func cleanup(pidfile string) {
-	err := os.Remove(pidfile)
-	if nil != err {
-		log.Fatal(err)
-	}
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Route functions
 
@@ -208,57 +177,81 @@ func (c *State) GetDB() *sql.DB {
 	return c.Db
 }
 
-////////////////////////////////////////////////////////////////////////////////
-//Entrypoint
+func (c *State) ParseArgs() {
+	c.Args = Args{}
+	flag.StringVar(&c.Args.Config, "config", "/etc/bns.yaml", "Alternate configuration file.")
+	flag.Parse()
+}
 
-func main() {
-	log.Printf("Build Number Server version %s starting up", Version)
-	log.Printf(Git)
-	// Parse command line
-	args := parse_args()
-	fmt.Printf("Config file: %s\n", args.Config)
-
-	// load configuration
-	conf := load_config(args.Config)
-	fmt.Printf("pidfile: %s\n", conf.Pidfile)
-	fmt.Printf("dbpath: %s\n", conf.DbPath)
-	fmt.Printf("port: %d\n", conf.Port)
-
-	// Create pidfile
-	pidbuf := fmt.Sprintf("%d\n", os.Getpid())
-	err := ioutil.WriteFile(conf.Pidfile, []byte(pidbuf), 644)
+func (c *State) LoadConfig() {
+	c.Conf = Config{}
+	dat, err := ioutil.ReadFile(c.Args.Config)
 	check(err)
+	err = yaml.Unmarshal(dat, &c.Conf)
+	check(err)
+}
 
-	// set cleanup hook
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+func (c *State) WritePidfile() {
+	pidbuf := fmt.Sprintf("%d\n", os.Getpid())
+	err := ioutil.WriteFile(c.Conf.Pidfile, []byte(pidbuf), 644)
+	check(err)
+}
+
+func (c *State) CreateExitHandler() {
+	sigChannel := make(chan os.Signal, 2)
+	signal.Notify(sigChannel, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-c
-		cleanup(conf.Pidfile)
+		<-sigChannel
+		// cleanup(c.Conf.Pidfile)
+		c.Close()
 		os.Exit(1)
 	}()
+}
 
-	state := State{args, conf, nil}
-
+func (c *State) CreateDB() {
 	create := `
   create table if not exists state (
     project varchar(30) primary key not null,
     build integer
   );
   `
-	// 	_, err = db.Exec(create)
-	// 	check(err)
-	_, err = state.GetDB().Exec(create)
+	_, err := c.GetDB().Exec(create)
 	check(err)
-	defer state.GetDB().Close()
+}
 
-	// buf := fmt.Sprintf(":%d", conf.Port)
+func (c *State) Close() {
+	log.Printf("Closing.")
+	c.Db.Close()
+}
+
+func (c *State) CreateRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
-	// router.HandleFunc("/{project}", state.GetBuildNumber).Methods("GET").Queries("action", "{new}")
-	router.HandleFunc("/{project}/inc", state.IncrementBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}/inc/{style:(?:bash|json|yaml)}", state.IncrementBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}", state.GetBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}/{style:(?:bash|json|yaml)}", state.GetBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}/{build}", state.SetBuildNumber).Methods("POST")
-	log.Fatal(http.ListenAndServe(state.GetPortString(), router))
+	router.HandleFunc("/{project}/inc", c.IncrementBuildNumber).Methods("GET")
+	router.HandleFunc("/{project}/inc/{style:(?:bash|json|yaml)}", c.IncrementBuildNumber).Methods("GET")
+	router.HandleFunc("/{project}", c.GetBuildNumber).Methods("GET")
+	router.HandleFunc("/{project}/{style:(?:bash|json|yaml)}", c.GetBuildNumber).Methods("GET")
+	router.HandleFunc("/{project}/{build}", c.SetBuildNumber).Methods("POST")
+	return router
+}
+
+func (c *State) Run() {
+	c.ParseArgs()
+	c.LoadConfig()
+	c.WritePidfile()
+	c.CreateExitHandler()
+	c.CreateDB()
+	defer c.Close()
+	log.Fatal(http.ListenAndServe(c.GetPortString(), c.CreateRouter()))
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//Entrypoint
+
+func main() {
+	log.Printf("Build Number Server version %s starting up", Version)
+	log.Printf(Git)
+
+	state := State{}
+	state.Run()
+
 }

@@ -21,9 +21,6 @@ import (
 	"syscall"
 )
 
-const PIDFILE = "/var/run/bns.pid"
-const VERSION = "0.0.6"
-
 var Git = "not set"
 var Version = "not set"
 var Date = "not set"

@@ -15,7 +15,7 @@ import (
 	"os"
 	"os/signal"
 	// "reflect"
-	"encoding/json"
+	// "encoding/json"
 	"strconv"
 	"strings"
 	"syscall"
@@ -30,9 +30,10 @@ type Args struct {
 }
 
 type Config struct {
-	Pidfile string
-	DbPath  string
-	Port    int
+	Pidfile      string
+	DbPath       string
+	VariableName string
+	Port         int
 }
 
 func check(e error) {
@@ -105,22 +106,24 @@ func (c *State) FormatOutput(build int, style string) string {
 	buf := ""
 	if strings.Compare(style, "json") == 0 {
 		log.Printf("Output style set to JSON")
-		data := &BuildNumber{build}
-		var err error
-		tmp, err := json.Marshal(data)
-		check(err)
-		buf = string(tmp)
+		buf = fmt.Sprintf("{\"%s\": %d}", c.Conf.VariableName, build)
+		// 		data := &BuildNumber{build}
+		// 		var err error
+		// 		tmp, err := json.Marshal(data)
+		// 		check(err)
+		// 		buf = string(tmp)
 	} else if strings.Compare(style, "yaml") == 0 {
 		log.Printf("Output style set to Yaml")
-		data := &BuildNumber{build}
-		var err error
-		tmp, err := yaml.Marshal(data)
-		check(err)
-		buf = string(tmp)
+		buf = fmt.Sprintf("%s: %d", c.Conf.VariableName, build)
+		// 		data := &BuildNumber{build}
+		// 		var err error
+		// 		tmp, err := yaml.Marshal(data)
+		// 		check(err)
+		// 		buf = string(tmp)
 	} else {
 		// default to bash style
 		log.Printf("Output style defaulting to Bash")
-		buf = fmt.Sprintf("SS_BUILD_NUMBER=%d", build)
+		buf = fmt.Sprintf("%s=%d", c.Conf.VariableName, build)
 	}
 	log.Printf("Output: %s", buf)
 	return buf

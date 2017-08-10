@@ -2,3 +2,4 @@
 pidfile: /var/run/bns.pid
 dbpath: ./foo.db
 port: 7000
+variablename: DEMO

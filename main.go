@@ -230,11 +230,11 @@ func (c *State) Close() {
 
 func (c *State) CreateRouter() *mux.Router {
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/{project}/inc", c.IncrementBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}/inc/{style:(?:bash|json|yaml)}", c.IncrementBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}", c.GetBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}/{style:(?:bash|json|yaml)}", c.GetBuildNumber).Methods("GET")
-	router.HandleFunc("/{project}/{build}", c.SetBuildNumber).Methods("POST")
+	router.HandleFunc("/{project:.*?}/inc/{style:(?:bash|json|yaml)}", c.IncrementBuildNumber).Methods("GET")
+	router.HandleFunc("/{project:.*}/inc", c.IncrementBuildNumber).Methods("GET")
+	router.HandleFunc("/{project:.*?}/{style:(?:bash|json|yaml)}", c.GetBuildNumber).Methods("GET")
+	router.HandleFunc("/{project:.*}", c.GetBuildNumber).Methods("GET")
+	router.HandleFunc("/{project:.*?}/{build}", c.SetBuildNumber).Methods("POST")
 	return router
 }
 

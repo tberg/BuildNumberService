@@ -6,9 +6,10 @@ all: build
 	
 
 package: build
-	mkdir -p staging/bin
-	cp ${OUT} staging/bin/
-	tar czf bns-${VERSION}.tar.gz -C staging .
+	mkdir -p staging/${OUT}-${VERSION}/bin
+	cp ${OUT} staging/${OUT}-${VERSION}/bin/
+	cp README.md staging/${OUT}-${VERSION}/
+	tar czf bns-${VERSION}.tar.gz -C staging ${OUT}-${VERSION}
 
 build: main.go
 	go fmt

@@ -161,9 +161,10 @@ func (c *State) SetBuildNumber(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	build, err := strconv.Atoi(params["build"])
 	check(err)
+	_style := params["style"]
 	c._setBuildNumber(params["project"], build)
 	log.Printf("Resetting proejct %s to build %d", params["project"], build)
-	fmt.Fprintf(w, "SS_BUILD_NUMBER=%d\n", build)
+	fmt.Fprintf(w, "%s\n", c.FormatOutput(build, _style))
 }
 
 func (c *State) GetPortString() string {

@@ -1,5 +1,5 @@
 GIT_COMMIT := $(shell git describe --always --long --dirty)
-VERSION := 0.0.6
+VERSION := 0.0.7
 OUT := bns
 
 all: build

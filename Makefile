@@ -5,6 +5,11 @@ OUT := bns
 all: build
 	
 
+package: build
+	mkdir -p staging/bin
+	cp ${OUT} staging/bin/
+	tar czf bns-${VERSION}.tar.gz -C staging .
+
 build: main.go
 	go fmt
 	go get
@@ -12,3 +17,8 @@ build: main.go
 
 test: build
 	./${OUT} -config ./conf.yaml
+
+ .PHONY:clean
+
+clean:
+	rm -rf ${OUT} bns-${VERSION}.tar.gz staging
